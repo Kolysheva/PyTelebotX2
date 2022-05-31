@@ -15,11 +15,11 @@ def get_foxURL():
 # -----------------------------------------------------------------------
 def get_aks():
     url = ""
-    req = requests.get('https://axoltlapi.herokuapp.com/')
+    req = requests.get('https://zoo-animal-api.herokuapp.com/animals/rand')
     if req.status_code == 200:
         r_json = req.json()
-        url = r_json['url']
-    # url.split("/")[-1]
+        url = r_json['image_link']
+
     return url
 
 
@@ -30,7 +30,7 @@ def get_dogURL():
     if req.status_code == 200:
         r_json = req.json()
         url = r_json['url']
-        # url.split("/")[-1]
+
     return url
 # -----------------------------------------------------------------------
 

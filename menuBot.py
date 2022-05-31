@@ -1,4 +1,6 @@
 from telebot import types
+import pickle
+import os
 
 
 # -----------------------------------------------------------------------
@@ -25,7 +27,8 @@ class Users:
         return f"Name user: {self.firstName}   id: {self.userName}   lang: {self.languageCode}"
 
     def getUserHTML(self):
-        return f"Name user: {self.firstName}   id: <a href='https://t.me/{self.userName}'>{self.userName}</a>   lang: {self.languageCode}"
+        return f"Name user: {self.firstName}   id: <a href='https://t.me/{self.userName}'>{self.userName}</a>   " \
+               f"lang: {self.languageCode}"
 
     @classmethod
     def getUser(cls, chat_id):
@@ -37,24 +40,22 @@ class Menu:
     hash = {}  # тут будем накапливать все созданные экземпляры класса
     cur_menu = {}  # тут будет находиться текущий экземпляр класса, текущее меню для каждого пользователя
     extendedParameters = {}  # это место хранения дополнительных параметров для передачи в inline кнопки
+    namePickleFile = "bot_curMenu.plk"
 
     # ПЕРЕПИСАТЬ для хранения параметров привязанных к chat_id и названию кнопки
-
-    def __init__(self, name, buttons=None, parent=None, handler=None):
+    def __init__(self, name, buttons=None, parent=None, module=""):
         self.parent = parent
+        self.module = module
         self.name = name
         self.buttons = buttons
-        self.handler = handler
-
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=5)
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=4)
         markup.add(*buttons)  # Обратите внимание - звёздочка используется для распаковки списка
         self.markup = markup
-
         self.__class__.hash[name] = self  # в классе содержится словарь, со всеми экземплярами класса, обновим его
 
     @classmethod
     def getExtPar(cls, id):
-        return cls.extendedParameters.pop(id, None)
+        return cls.extendedParameters.get(id, None)
 
     @classmethod
     def setExtPar(cls, parameter):
@@ -68,26 +69,65 @@ class Menu:
         menu = cls.hash.get(name)
         if menu is not None:
             cls.cur_menu[chat_id] = menu
+            cls.saveCurMenu()
         return menu
 
     @classmethod
     def getCurMenu(cls, chat_id):
         return cls.cur_menu.get(chat_id)
 
+    @classmethod
+    def loadCurMenu(self):
+        if os.path.exists(self.namePickleFile):
+            with open(self.namePickleFile, 'rb') as pickle_in:
+                self.cur_menu = pickle.load(pickle_in)
+        else:
+            self.cur_menu = {}
+
+    @classmethod
+    def saveCurMenu(self):
+        with open(self.namePickleFile, 'wb') as pickle_out:
+            pickle.dump(self.cur_menu, pickle_out)
+# ---------------------------------------------
+
+
+def goto_menu(bot, chat_id, name_menu):
+    # получение нужного элемента меню
+    cur_menu = Menu.getCurMenu(chat_id)
+    if name_menu == "Выход" and cur_menu is not None and cur_menu.parent is not None:
+        target_menu = Menu.getMenu(chat_id, cur_menu.parent.name)
+    else:
+        target_menu = Menu.getMenu(chat_id, name_menu)
+
+    if target_menu is not None:
+        bot.send_message(chat_id, text=target_menu.name, reply_markup=target_menu.markup)
+        return target_menu
+    else:
+        return None
+# ----------------------------------------------
+
 
 m_main = Menu("Главное меню", buttons=["Развлечения", "Игры", "ДЗ", "Помощь"])
 
 # ---------------
 m_fun = Menu("Развлечения", buttons=["Прислать картинку", "Прислать анекдот",
-                                     "Прислать фильм", "Выход"], parent=m_main)
+                                     "Прислать фильм", "Угадай кто?", "Прислать новости", "Выход"], parent=m_main,
+             module="fun")
 m_DZ = Menu("ДЗ", buttons=["Задание-1", "Задание-2", "Задание-3", "Задание-4", "Задание-5", "Задание-6", "Выход"],
-            parent=m_main)
-m_games = Menu("Игры", buttons=["Камень, ножницы, бумага", "Игра в 21", "Угадай кто?", "Выход"], parent=m_main)
+            parent=m_main, module="DZ")
+m_games = Menu("Игры", buttons=["Камень, ножницы, бумага", "Игра в 21", "Выход"],
+               parent=m_main)
+
 # ---------------
-m_game_21 = Menu("Игра в 21", buttons=["Карту!", "Стоп!", "Выход"], parent=m_games, handler="game_21")
+
+m_game_21 = Menu("Игра в 21", buttons=["Карту!", "Стоп!", "Выход"], parent=m_games, module="botGames")
 m_game_rsp = Menu("Камень, ножницы, бумага", buttons=["Камень", "Ножницы", "Бумага", "Выход"], parent=m_games,
-                  handler="game_rsp")
+                  module="botGames")
+m_game_vic = Menu ("Викторина", buttons=["Мифы", "Психология", "Выход"], parent=m_games, module="menuVictor")
+
 # ----------------
-m_image = Menu("Прислать картинку", buttons=["Лиса", "Собака", "Аксолотль", "Утка", "Выход"], parent=m_fun)
+
+m_image = Menu("Прислать картинку", buttons=["Лиса", "Собака", "Рандом", "Утка", "Выход"], parent=m_fun, module="fun")
 
 
+Menu.loadCurMenu()

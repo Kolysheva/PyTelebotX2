@@ -1,4 +1,41 @@
 import requests
+from telebot import types
+from menuBot import goto_menu
+
+
+def get_text_messages(bot, cur_user, message):
+    chat_id = message.chat.id
+    ms_text = message.text
+
+    if ms_text == "Карту!":
+        game21 = getGame(chat_id)
+        if game21 is None:  # если мы случайно попали в это меню, а объекта с игрой нет
+            goto_menu(bot, chat_id, "Выход")
+            return
+
+        text_game = game21.get_cards(1)
+        bot.send_media_group(chat_id, media=game21.mediaCards)  # получим и отправим изображения карт
+        bot.send_message(chat_id, text=text_game)
+
+        if game21.status is not None:  # выход, если игра закончена
+            stopGame(chat_id)
+            goto_menu(bot, chat_id, "Выход")
+            return
+
+    elif ms_text == "Стоп!":
+        stopGame(chat_id)
+        goto_menu(bot, chat_id, "Выход")
+        return
+
+    elif ms_text in GameRPS.values:
+        gameRSP = getGame(chat_id)
+        if gameRSP is None:  # если мы случайно попали в это меню, а объекта с игрой нет
+            goto_menu(bot, chat_id, "Выход")
+            return
+        text_game = gameRSP.playerChoice(ms_text)
+        bot.send_message(chat_id, text=text_game)
+        gameRSP.newGame()
+
 
 # -----------------------------------------------------------------------
 
@@ -11,11 +48,11 @@ def newGame(chatID, newGame):
 
 
 def getGame(chatID):
-    return activeGames.get(chatID)
+    return activeGames.get(chatID, None)
 
 
 def stopGame(chatID):
-    activeGames.pop(chatID)
+    activeGames.pop(chatID, None)
 
 
 # -----------------------------------------------------------------------
@@ -26,7 +63,7 @@ class Card:
     emo_DIAMONDS = "U0002666"  # Unicod эмоджи Буби
 
     def __init__(self, card):
-        if isinstance(card, dict):
+        if isinstance(card, dict):  # если передали словарь
             self.__card_JSON = card
             self.code = card["code"]
             self.suit = card["suit"]
@@ -94,13 +131,13 @@ class Card:
             return int(self.value)
 
     def get_color_card(self):
-        if self.suit == "SPADES":
+        if self.suit == "SPADES":  # Пики
             return "BLACK"
-        elif self.suit == "CLUBS":
+        elif self.suit == "CLUBS":  # Крести
             return "BLACK"
-        elif self.suit == "HEARTS":
+        elif self.suit == "HEARTS":  # Черви
             return "RED"
-        elif self.suit == "DIAMONDS":
+        elif self.suit == "DIAMONDS":  # Буби
             return "RED"
 
 
@@ -113,13 +150,15 @@ class Game21:
             self.remaining = new_pack["remaining"],  # количество оставшихся карт в колоде
             self.card_in_game = []  # карты в игре
             self.arr_cards_URL = []  # URL карт игрока
+            self.mediaCards = []
             self.score = 0  # очки игрока
             self.status = None  # статус игры, True - игрок выиграл, False - Игрок проиграл, None - Игра продолжается
 
     # ---------------------------------------------------------------------
+
     def new_pack(self, deck_count, jokers_enabled=False):
         txtJoker = "&jokers_enabled=true" if jokers_enabled else ""
-        response = requests.get(f"https://deckofcardsapi.com/api/deck/new/shuffle/?deck_count={deck_count}"+txtJoker)
+        response = requests.get(f"https://deckofcardsapi.com/api/deck/new/shuffle/?deck_count={deck_count}" + txtJoker)
         # создание стопки карт из "deck_count" колод по 52 карты
         if response.status_code != 200:
             return None
@@ -151,6 +190,7 @@ class Game21:
             self.card_in_game.append(card_obj)
             self.score = self.score + card_obj.cost
             self.arr_cards_URL.append(card["image"])
+            self.mediaCards.append(types.InputMediaPhoto(card["image"]))
 
         if self.score > 21:
             self.status = False
@@ -169,6 +209,12 @@ class Game21:
 # -----------------------------------------------------------------------
 class GameRPS:
     values = ["Камень", "Ножницы", "Бумага"]
+    name = "Камень-Ножницы-Бумага"
+    text_rules = "<b>Победитель определяется по следующим правилам:</b>\n" \
+                 "1. Камень побеждает ножницы\n" \
+                 "2. Бумага побеждает камень\n" \
+                 "3. Ножницы побеждают бумагу\n"
+    url_picRules = "https://i.ytimg.com/vi/Gvks8_WLiw0/maxresdefault.jpg"
 
     def __init__(self):
         self.computerChoice = self.__class__.getRandomChoice()
@@ -180,7 +226,7 @@ class GameRPS:
     def getRandomChoice(cls):
         lenValues = len(cls.values)
         import random
-        rndInd = random.randint(0, lenValues-1)
+        rndInd = random.randint(0, lenValues - 1)
         return cls.values[rndInd]
 
     def playerChoice(self, player1Choice):
@@ -198,5 +244,9 @@ class GameRPS:
 
 
 # -----------------------------------------------------------------------
+
+# --------------------------
+
+
 if __name__ == "__main__":
     print("Этот код должен использоваться ТОЛЬКО в качестве модуля!")
